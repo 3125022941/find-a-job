@@ -43,6 +43,11 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+# 收敛 loguru 输出：去掉默认那种满屏变量栈（diagnose/backtrace）
+logger.remove()
+logger.add(sys.stderr, level="INFO", backtrace=False, diagnose=False,
+           format="<green>{time:HH:mm:ss}</green> | <level>{level:<7}</level> | {message}")
+
 ROOT = Path(__file__).resolve().parent
 OUT_DIR = ROOT / "recruit_out"
 LOG_DIR = OUT_DIR / "logs"
@@ -146,6 +151,7 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
     proxies = {"http": cfg["proxy"], "https": cfg["proxy"]} if cfg.get("proxy") else None
 
     best: dict[str, Hit] = {}  # note_id -> 最高分的 Hit
+    ok_count = 0  # 成功且有返回的关键词数（用于识别整体被限流）
 
     for keyword in cfg.get("keywords", []):
         try:
@@ -162,6 +168,8 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
             continue
 
         notes = [n for n in notes if n.get("model_type") == "note"]
+        if notes:
+            ok_count += 1
         logger.info(f"关键词 [{keyword}] 命中笔记 {len(notes)} 条")
         for n in notes:
             note_id = n.get("id", "")
@@ -210,14 +218,17 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
             time.sleep(sleep_s)
         hits = sorted(hits, key=lambda h: h.score, reverse=True)
 
-    return hits
+    return hits, ok_count
 
 
-def update_progress(progress: dict[str, Any], fresh: list[Hit], today: str) -> dict[str, Any]:
-    """按公司维度记录最新/最强信号。"""
+def update_progress(progress: dict[str, Any], fresh: list[Hit], today: str) -> tuple[dict[str, Any], list[str]]:
+    """按公司维度记录最新/最强信号。返回 (progress, 本次首次出现信号的公司列表)。"""
+    new_companies: list[str] = []
     for h in fresh:
         for comp in h.companies:
             cur = progress.get(comp)
+            if cur is None and comp not in new_companies:
+                new_companies.append(comp)  # 这家公司之前从没出现过信号 = 新开
             if cur is None or h.score >= cur.get("score", 0):
                 progress[comp] = {
                     "score": h.score,
@@ -228,7 +239,7 @@ def update_progress(progress: dict[str, Any], fresh: list[Hit], today: str) -> d
                     "first_seen": cur.get("first_seen", today) if cur else today,
                     "updated": today,
                 }
-    return progress
+    return progress, new_companies
 
 
 def render_progress_md(progress: dict[str, Any], companies: list[str]) -> str:
@@ -303,7 +314,17 @@ def main() -> int:
     seen = set(load_json(seen_path, []))
     progress = load_json(progress_path, {})
 
-    all_hits = collect(cfg, cookies, args.detail)
+    all_hits, ok_count = collect(cfg, cookies, args.detail)
+
+    # 所有关键词都没采到内容 = 多半被小红书限流；不要用空结果覆盖今天已有的好数据
+    if ok_count == 0:
+        print("⚠️ 所有关键词都没采到内容，多半是被小红书限流了。")
+        print("   建议：过一段时间（比如几小时后）再跑；不要短时间内反复执行。")
+        print("   本次不写入、不覆盖已有文件。")
+        save_json(OUT_DIR / "new_companies.json", [])
+        (OUT_DIR / "notify_message.txt").write_text("", "utf-8")
+        return 0
+
     fresh = [h for h in all_hits if h.note_id not in seen]
 
     snapshot = render_snapshot_md(fresh, all_hits, today, args.dry_run)
@@ -314,13 +335,22 @@ def main() -> int:
         for h in fresh:
             seen.add(h.note_id)
         save_json(seen_path, sorted(seen))
-        progress = update_progress(progress, fresh, today)
+        progress, new_companies = update_progress(progress, fresh, today)
         save_json(progress_path, progress)
+        save_json(OUT_DIR / "new_companies.json", new_companies)
+        # 给 run_daily.ps1 用的现成通知文案（UTF-8），避免在 ps1 里写中文
+        notify_msg = (
+            f"提前批新开：{'、'.join(new_companies)}（详情见 2027提前批进展.md）"
+            if new_companies else ""
+        )
+        (OUT_DIR / "notify_message.txt").write_text(notify_msg, "utf-8")
         (OUT_DIR / "2027提前批进展.md").write_text(
             render_progress_md(progress, cfg.get("companies", [])), "utf-8"
         )
         print(f"\n✅ 已写入：{LOG_DIR / f'check-{today}.md'}")
         print(f"✅ 已更新总表：{OUT_DIR / '2027提前批进展.md'}")
+        if new_companies:
+            print(f"🔔 本次新开：{'、'.join(new_companies)}")
 
     return 0
 
