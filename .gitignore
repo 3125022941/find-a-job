@@ -1,0 +1,26 @@
+# ===== 密钥 / 凭证（绝对不能上传）=====
+.env
+**/.env
+*.env
+!*.env.example
+
+# ===== 依赖 =====
+**/node_modules/
+node_modules/
+
+# ===== Python =====
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ===== Spider_XHS 采集下载的媒体 / Excel（体积大，不传）=====
+Spider_XHS/datas/
+
+# ===== 临时文件 =====
+*.log
+_preview.md
+_run.log
+.DS_Store
