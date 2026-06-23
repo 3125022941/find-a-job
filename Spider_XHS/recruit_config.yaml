@@ -51,7 +51,10 @@ search:
   note_type: 0           # 0 不限, 1 视频, 2 图文
   min_score: 4           # 低于该分数的命中不计入
   detail_threshold: 7    # 分数 >= 该值时，--detail 模式才去拉笔记正文确认
-  sleep_seconds: 1.5     # 每次请求之间的间隔（降低封号风险）
+  # 请求间隔：在 [sleep_min, sleep_max] 之间随机取值（抖动，更像真人，降低限流）
+  sleep_min: 3.0
+  sleep_max: 6.5
+  max_detail: 5          # --detail 模式每次最多拉多少条正文（封顶，避免请求爆炸）
 
 # 可选代理，降低封号风险，例如 http://127.0.0.1:7890；留空则不用
 proxy: ""

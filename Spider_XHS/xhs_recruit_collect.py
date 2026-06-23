@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from dataclasses import dataclass, asdict, field
@@ -147,7 +148,15 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
     note_type = int(s.get("note_type", 0))
     min_score = int(s.get("min_score", 4))
     detail_threshold = int(s.get("detail_threshold", 7))
-    sleep_s = float(s.get("sleep_seconds", 1.5))
+    # 请求间隔：随机抖动，更像真人。兼容旧的 sleep_seconds。
+    _legacy = s.get("sleep_seconds")
+    sleep_min = float(s.get("sleep_min", _legacy if _legacy is not None else 3.0))
+    sleep_max = float(s.get("sleep_max", _legacy if _legacy is not None else 6.5))
+    max_detail = int(s.get("max_detail", 5))
+
+    def nap() -> None:
+        time.sleep(random.uniform(min(sleep_min, sleep_max), max(sleep_min, sleep_max)))
+
     proxies = {"http": cfg["proxy"], "https": cfg["proxy"]} if cfg.get("proxy") else None
 
     best: dict[str, Hit] = {}  # note_id -> 最高分的 Hit
@@ -160,11 +169,11 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
             )
         except Exception as e:  # noqa: BLE001
             logger.warning(f"搜索失败 [{keyword}]: {e}")
-            time.sleep(sleep_s)
+            nap()
             continue
         if not success:
             logger.warning(f"搜索未成功 [{keyword}]: {msg}")
-            time.sleep(sleep_s)
+            nap()
             continue
 
         notes = [n for n in notes if n.get("model_type") == "note"]
@@ -191,14 +200,19 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
             prev = best.get(note_id)
             if prev is None or hit.score > prev.score:
                 best[note_id] = hit
-        time.sleep(sleep_s)
+        nap()
 
     hits = sorted(best.values(), key=lambda h: h.score, reverse=True)
 
     if want_detail:
+        detail_done = 0
         for h in hits:
             if h.score < detail_threshold:
                 continue
+            if detail_done >= max_detail:
+                logger.info(f"已达 detail 上限 {max_detail} 条，跳过剩余正文拉取")
+                break
+            detail_done += 1
             try:
                 ok, msg, res = apis.get_note_info(h.url, cookies, proxies)
                 if ok and dig(res, "data", "items"):
@@ -215,7 +229,7 @@ def collect(cfg: dict[str, Any], cookies: str, want_detail: bool) -> list[Hit]:
                         h.companies = matched
             except Exception as e:  # noqa: BLE001
                 logger.debug(f"拉正文失败 {h.note_id}: {e}")
-            time.sleep(sleep_s)
+            nap()
         hits = sorted(hits, key=lambda h: h.score, reverse=True)
 
     return hits, ok_count
