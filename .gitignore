@@ -50,6 +50,7 @@ Spider_XHS/*
 !Spider_XHS/xhs_recruit_collect.py
 !Spider_XHS/recruit_config.yaml
 !Spider_XHS/run_daily.ps1
+!Spider_XHS/check_cookie.py
 !Spider_XHS/README_招聘监控.md
 
 MediaCrawler/*
