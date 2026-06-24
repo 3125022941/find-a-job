@@ -1,26 +1,56 @@
+# ============================================================
+# 公开仓库：只上传自己的代码 + 搭建说明。
+# 第三方爬虫本体（Spider_XHS / MediaCrawler）不传，密钥/登录态绝不传。
+# ============================================================
+
 # ===== 密钥 / 凭证（绝对不能上传）=====
 .env
 **/.env
 *.env
 !*.env.example
+**/.dy_cookie.txt
+*cookie*.txt
 
-# ===== 依赖 =====
+# ===== 浏览器登录态 / 抓取数据（含会话，绝不上传）=====
+**/browser_data/
+**/data/
+Spider_XHS/datas/
+
+# ===== 运行产物（可再生，不传）=====
+**/recruit_out/
+**/dy_out/
+recruit_out/
+**/seen.json
+**/progress.json
+**/new_companies.json
+**/master_seen.json
+
+# ===== 依赖 / 虚拟环境 =====
 **/node_modules/
 node_modules/
+**/.venv/
+.venv/
+venv/
 
 # ===== Python =====
 __pycache__/
 **/__pycache__/
 *.py[cod]
 *.egg-info/
-.venv/
-venv/
 
-# ===== Spider_XHS 采集下载的媒体 / Excel（体积大，不传）=====
-Spider_XHS/datas/
-
-# ===== 临时文件 =====
+# ===== 临时文件 / 日志 =====
 *.log
-_preview.md
-_run.log
+_*.md
 .DS_Store
+
+# ============================================================
+# 第三方本体：整目录忽略，只保留“我自己写的文件”
+# ============================================================
+Spider_XHS/*
+!Spider_XHS/xhs_recruit_collect.py
+!Spider_XHS/recruit_config.yaml
+!Spider_XHS/run_daily.ps1
+!Spider_XHS/README_招聘监控.md
+
+MediaCrawler/*
+!MediaCrawler/dy_recruit_collect.py
